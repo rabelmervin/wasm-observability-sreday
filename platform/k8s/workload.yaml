@@ -1,0 +1,76 @@
+# The demo platform as one wasmCloud workload (wasmCloud v2.12.2).
+#
+#   kubectl apply -f platform/k8s/workload.yaml
+#
+# The runtime-operator schedules it onto a host in host group "sreday": the
+# `wash host` you start on this machine. The host pulls all four components from
+# the local OCI registry and links them in-process: the router's imports
+# `app-a:`, `app-b:`, `app-c:` resolve to the components with those names below.
+apiVersion: runtime.wasmcloud.dev/v1alpha1
+kind: WorkloadDeployment
+metadata:
+  name: sreday-platform
+  namespace: default
+spec:
+  replicas: 1
+  template:
+    spec:
+      hostSelector:
+        hostgroup: sreday
+
+      components:
+        # Entry point: exports wasi:http/incoming-handler.
+        - name: router
+          image: localhost:5001/sreday/router:0.1.1
+          imagePullPolicy: IfNotPresent
+          localResources:
+            allowedHosts: []                 # no egress
+
+        - name: app-a                        # invoice-pdf: calls its PDF vendor
+          image: localhost:5001/sreday/app-a:0.1.1
+          imagePullPolicy: IfNotPresent
+          localResources:
+            config:
+              # toxiproxy, published on the Docker bridge address of this machine.
+              # (host.wasmcloud.internal only works for raw wasi:sockets in 2.12.2,
+              # not for outgoing wasi:http.)
+              vendor_url: http://172.17.0.1:8666/invoices
+            allowedHosts: ["172.17.0.1"]
+
+        - name: app-b                        # price-calc: pure compute + keyvalue
+          image: localhost:5001/sreday/app-b:0.1.1
+          imagePullPolicy: IfNotPresent
+          localResources:
+            allowedHosts: []                 # no egress at all
+
+        - name: app-c                        # data-sync: calls its CRM vendor
+          image: localhost:5001/sreday/app-c:0.1.1
+          imagePullPolicy: IfNotPresent
+          localResources:
+            config:
+              vendor_url: http://172.17.0.1:8667/sync
+              resync_mb: "384"
+            allowedHosts: ["172.17.0.1"]
+
+      hostInterfaces:
+        # HTTP ingress. The host routes by Host header: curl and k6 both use localhost:8000.
+        - namespace: wasi
+          package: http
+          interfaces: [incoming-handler]
+          config:
+            host: localhost
+
+        # Per-app buckets (app-a, app-b, app-c) in the host's data NATS (JetStream KV).
+        - namespace: wasi
+          package: keyvalue
+          interfaces: [store, atomics]
+
+        # Values from localResources.config above.
+        - namespace: wasi
+          package: config
+          interfaces: [store]
+
+        # Guest spans/logs. No per-workload keys; enabled by `wash host --wasi-otel`.
+        - namespace: wasi
+          package: otel
+          interfaces: [types, tracing, logs]

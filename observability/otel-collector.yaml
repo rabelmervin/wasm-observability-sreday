@@ -1,0 +1,68 @@
+# OpenTelemetry Collector: single entry point for all telemetry from the wasmCloud host.
+#   traces  -> Tempo            (+ spanmetrics -> Prometheus, with exemplars)
+#   metrics -> Prometheus       (native OTLP receiver)
+#   logs    -> Loki             (native OTLP endpoint)
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+  resource/demo:
+    attributes:
+      - key: deployment.environment
+        value: sreday-demo
+        action: upsert
+
+connectors:
+  # RED metrics derived from spans, so every latency/error panel can jump to a trace (exemplars).
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 750ms, 1s, 1.5s, 2s, 2.5s, 3s, 4s, 5s, 10s]
+    dimensions:
+      - name: tenant.id            # set by our guest spans (router / tenants)
+      - name: function.name
+      - name: http.response.status_code
+      # Host HTTP span. Survives guest traps, so per-tenant error rates are
+      # computed from it (tenant parsed out of /t/{tenant}/{function}).
+      - name: url.path
+    exemplars:
+      enabled: true
+    metrics_flush_interval: 5s
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls:
+      insecure: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource/demo, batch]
+      exporters: [otlp/tempo, spanmetrics]
+    metrics:
+      receivers: [otlp, spanmetrics]
+      processors: [resource/demo, batch]
+      exporters: [otlphttp/prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [resource/demo, batch]
+      exporters: [otlphttp/loki]

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Break the platform on purpose, one layer at a time.
+#
+#   ./chaos/break slow   app-a [ms]   round 1: App A's PDF vendor gets slow (network, outside our code)
+#   ./chaos/break crash  app-b        round 2: App B enables pricing-v2 -> panics on sku-7 -> wasm trap
+#   ./chaos/break memory app-c        round 3: App C enables full-resync -> eats the shared memory budget
+#   ./chaos/break kv                  round 4: the shared keyvalue backend (data NATS) goes away
+#
+# Undo with ./chaos/fix
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+TOXI=http://localhost:8474
+say() { printf '\033[1;31m💥 %s\033[0m\n' "$*"; }
+# Feature flags live in each app's keyvalue bucket (JetStream KV on the data NATS).
+NATS_DATA=${NATS_DATA:-nats://localhost:4224}   # the data NATS (sreday-nats-data container)
+flag() { nats --server "$NATS_DATA" kv put "$1" flags "$2" >/dev/null 2>&1 \
+           || { echo "could not set flag $2 on $1 (is sreday-nats-data up?)" >&2; exit 1; }; }
+
+case "${1:-}" in
+  slow)
+    tenant="${2:-app-a}"; ms="${3:-2000}"
+    curl -sf -X DELETE "$TOXI/proxies/${tenant}-vendor/toxics/latency" >/dev/null 2>&1 || true
+    curl -sf -X POST "$TOXI/proxies/${tenant}-vendor/toxics" -H 'content-type: application/json' \
+      -d "{\"name\":\"latency\",\"type\":\"latency\",\"stream\":\"downstream\",\"attributes\":{\"latency\":${ms},\"jitter\":$((ms / 10))}}" >/dev/null
+    say "${tenant}'s vendor now answers ~${ms}ms slower"
+    ;;
+  crash)
+    tenant="${2:-app-b}"
+    flag "$tenant" pricing-v2
+    say "${tenant} enabled feature flag pricing-v2"
+    ;;
+  memory)
+    tenant="${2:-app-c}"   # resync size: platform/k8s/workload.yaml -> resync_mb
+    flag "$tenant" full-resync
+    say "${tenant} enabled feature flag full-resync"
+    # ...and their resync job fans out over all accounts at once: 30s of parallel
+    # calls, so several 384 MiB instances overlap and hit the host's memory budget.
+    (
+      end=$((SECONDS + 30))
+      while (( SECONDS < end )); do
+        for _ in 1 2 3 4 5; do
+          curl -s -o /dev/null -m 15 -X POST "localhost:8000/t/${tenant}/data-sync" -d '{"job":"resync"}' &
+        done
+        wait
+      done
+    ) >/dev/null 2>&1 &
+    say "${tenant}'s resync job is running (30s burst)"
+    ;;
+  kv)
+    docker stop sreday-nats-data >/dev/null
+    say "sreday-nats-data (shared keyvalue backend) is down"
+    ;;
+  *)
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    exit 1
+    ;;
+esac

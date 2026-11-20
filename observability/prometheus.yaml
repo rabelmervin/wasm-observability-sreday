@@ -1,0 +1,31 @@
+# Metrics arrive via OTLP push from the collector (--web.enable-otlp-receiver).
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+otlp:
+  promote_resource_attributes:
+    - service.name
+    - tenant.id
+    - deployment.environment
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Availability: the blackbox exporter calls the wasmCloud host's /healthz
+  # (on this machine, reached via the Docker bridge) every 5s.
+  - job_name: wasmcloud-probe
+    metrics_path: /probe
+    params:
+      module: [wasmcloud_healthz]
+    static_configs:
+      - targets: ["http://172.17.0.1:8000/healthz"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

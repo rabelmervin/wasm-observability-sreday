@@ -1,0 +1,83 @@
+# Break It, Then Trace It - supporting services
+#
+# Observability backend + the "outside world" the apps call. The wasmCloud
+# platform itself (kind, operator, NATS, registry, wash host) is set up by hand,
+# step by step: see README.
+#
+#   docker compose up -d                 # observability + vendor mock + toxiproxy
+#
+# Grafana: http://localhost:3000  (anonymous admin, no login on stage)
+
+name: sreday
+
+services:
+  # ---------------------------------------------------------------- telemetry
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.112.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC from the wasmCloud host (the only telemetry port it uses)
+    depends_on: [tempo, prometheus, loki]
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    user: root
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --web.enable-otlp-receiver
+      - --enable-feature=exemplar-storage
+      - --storage.tsdb.retention.time=1d
+    volumes:
+      - ./observability/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+    # no published port: Grafana queries it inside the Docker network
+
+  # Outside-in availability probe of the wasmCloud host (/healthz), scraped by Prometheus.
+  blackbox:
+    image: prom/blackbox-exporter:v0.27.0
+    command: ["--config.file=/etc/blackbox/config.yaml"]
+    volumes:
+      - ./observability/blackbox.yaml:/etc/blackbox/config.yaml:ro
+
+  loki:
+    image: grafana/loki:3.2.1   # built-in single-node config (/etc/loki/local-config.yaml)
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/wasm-platform.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on: [prometheus, tempo, loki]
+
+  # ------------------------------------------------------- "outside world"
+  external-api:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/server.py"]
+    volumes:
+      - ./mocks/external-api:/app:ro
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: ["-host=0.0.0.0", "-config=/config/toxiproxy.json"]
+    volumes:
+      - ./chaos/toxiproxy.json:/config/toxiproxy.json:ro
+    ports:
+      - "8474:8474"   # control API used by ./chaos/break
+      - "8666:8666"   # app-a's vendor  (reached as 172.17.0.1:8666 from the components)
+      - "8667:8667"   # app-c's vendor  (reached as 172.17.0.1:8667 from the components)
+    depends_on: [external-api]
