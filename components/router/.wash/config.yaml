@@ -1,0 +1,4 @@
+# wash build: compiles this component (run inside this folder: wash build --skip-fetch)
+build:
+  command: cargo build --target wasm32-wasip2 --release
+  component_path: ../target/wasm32-wasip2/release/router.wasm

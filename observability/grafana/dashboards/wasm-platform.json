@@ -1,0 +1,1300 @@
+{
+  "uid": "wasm-platform",
+  "title": "Wasm Platform · Break It, Then Trace It",
+  "tags": [
+    "sreday",
+    "wasmcloud"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "### 🧨 Break It, Then Trace It &nbsp;·&nbsp; 3 tenants, 1 wasmCloud v2 host\n**Latency · Errors · Traffic · Saturation · Availability** per tenant → **Why** (top errors) → **Trace** (click ◆ or a trace ID) → **Explain** (logs linked by trace_id)"
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "1 · LATENCY: how long do requests take?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "p95 latency per tenant (◆ = exemplar → trace)",
+      "description": "From the host's HTTP span. Click a diamond to open that exact trace.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 10,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-a"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-b"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-c"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, tenant) (label_replace(sum by (le, url_path) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1m])), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\")))",
+          "legendFormat": "{{tenant}}",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "p50 · p95 · p99 per tenant (now)",
+      "description": "Percentiles over the last minute. p99 shows the worst requests that p95 hides.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 3,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 250
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, sum by (le, tenant) (label_replace(sum by (le, url_path) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1m])), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\")))",
+          "legendFormat": "{{tenant}} p50",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, tenant) (label_replace(sum by (le, url_path) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1m])), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\")))",
+          "legendFormat": "{{tenant}} p95",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le, tenant) (label_replace(sum by (le, url_path) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1m])), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\")))",
+          "legendFormat": "{{tenant}} p99",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Dependency: vendor call p95",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 6,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-a"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-b"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-c"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, tenant_id) (rate(traces_span_metrics_duration_milliseconds_bucket{span_name=\"vendor.call\"}[1m])))",
+          "legendFormat": "{{tenant_id}}",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "2 · ERRORS: what is failing, and why?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Error rate % per tenant",
+      "description": "5xx share per tenant, from the host's HTTP span: crashed requests count too.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 9,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-a"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-b"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-c"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (tenant) (label_replace(100 * (sum by (url_path) (rate(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\", status_code=\"STATUS_CODE_ERROR\"}[1m])) or 0 * sum by (url_path) (rate(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1m]))) / sum by (url_path) (rate(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1m])), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\"))",
+          "legendFormat": "{{tenant}}",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Why: top errors per tenant (5m)",
+      "description": "Error messages the components reported, grouped by tenant and reason. Comes from the guest logs (Loki).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 9,
+        "y": 12,
+        "w": 11,
+        "h": 8
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "namePlacement": "left",
+        "valueMode": "color",
+        "sizing": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "queryType": "instant",
+          "expr": "sum by (tenant_id, reason) (count_over_time({service_name=\"wasi-otel\"} | detected_level=\"error\" | resource_service_name != \"platform-router\" | regexp \"(?s)^(guest panic -> wasm trap: panicked at [^\\n]*\\n)?(?P<reason>.+)$\" | label_format reason=\"{{ trunc 80 .reason }}\" [5m]))",
+          "legendFormat": "{{tenant_id}} · {{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Wasm traps (guest panics, 5m)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 12,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (tenant_id) (increase(traces_span_metrics_calls_total{span_name=\"guest.panic\"}[5m])) or vector(0)",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Keyvalue errors (1m)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 16,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(traces_span_metrics_calls_total{span_name=~\"wasi.keyvalue.*\", status_code=\"STATUS_CODE_ERROR\"}[1m])) * 60 or vector(0)",
+          "legendFormat": "errors/min"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "3 · TRAFFIC: how much demand?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Requests / s per tenant",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 16,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-a"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-b"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app-c"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (tenant) (label_replace(sum by (url_path) (rate(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1m])), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\"))",
+          "legendFormat": "{{tenant}}",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Host view: invocations by component",
+      "description": "What the host meters on its own: one entry component. No tenants. That is why we tag spans with tenant.id.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 21,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (component) (rate(guest_invocation_duration_seconds_count[1m]))",
+          "legendFormat": "{{component}}",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "4 · SATURATION: how close to the limits?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Guest memory: in use vs budget",
+      "description": "Host-wide. The host knows memory is tight. It does not know which tenant.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 10,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "host budget"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "in use (all guests)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(guest_memory_in_use_bytes)",
+          "legendFormat": "in use (all guests)",
+          "exemplar": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(guest_memory_limit_bytes)",
+          "legendFormat": "host budget",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "CPU work: fuel consumed / s (whole platform)",
+      "description": "wasmtime fuel = instructions executed (wash host --meters fuel). The host meters only the entry component (router), so this is platform-wide, not per tenant.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 29,
+        "w": 10,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 6,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(fuel_consumption_sum[1m]))",
+          "legendFormat": "fuel / s",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Memory refusals (5m)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 29,
+        "w": 4,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(guest_memory_refused_total[5m])) or vector(0)",
+          "legendFormat": "refused"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "row",
+      "title": "5 · AVAILABILITY: are we meeting the SLO (99.9%)?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Host up (outside probe)",
+      "description": "Blackbox exporter calls /healthz every 5s. Works even when the host is down and sends no telemetry.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 6,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(probe_success)",
+          "legendFormat": "wasmCloud host",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Availability per tenant (last 1h)",
+      "description": "Successful requests / all requests over the last hour. Target: 99.9%.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 38,
+        "w": 9,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (1 - sum by (tenant) (label_replace((sum by (url_path) (increase(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\", status_code=\"STATUS_CODE_ERROR\"}[1h])) or 0 * sum by (url_path) (increase(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1h]))), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\")) / sum by (tenant) (label_replace(sum by (url_path) (increase(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1h])), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\")))",
+          "legendFormat": "{{tenant}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Error budget remaining (1h, SLO 99.9%)",
+      "description": "100% = no errors; 0% = budget used up; negative = SLO violated in this window.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 38,
+        "w": 9,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (1 - (sum by (tenant) (label_replace((sum by (url_path) (increase(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\", status_code=\"STATUS_CODE_ERROR\"}[1h])) or 0 * sum by (url_path) (increase(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1h]))), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\")) / sum by (tenant) (label_replace(sum by (url_path) (increase(traces_span_metrics_calls_total{service_name=\"wasmcloud-host\", span_kind=\"SPAN_KIND_SERVER\", url_path=~\"/t/.+\"}[1h])), \"tenant\", \"$1\", \"url_path\", \"/t/([^/]+)/.*\"))) / 0.0010)",
+          "legendFormat": "{{tenant}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "row",
+      "title": "TRACE · EXPLAIN: which request, which line?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "Failing requests: why (click a trace ID)",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "limit": 20,
+          "spss": 1,
+          "tableType": "spans",
+          "query": "{ resource.service.name = \"wasi-otel\" && status = error && name != \"tenant.invoke\" } | select(span.tenant.id, statusMessage)"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "logs",
+      "title": "Guest errors & warnings (trace-linked)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 10
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service_name=\"wasi-otel\"} | detected_level=~\"error|warn\" | line_format \"[{{.tenant_id}}] {{__line__}}\""
+        }
+      ]
+    }
+  ]
+}

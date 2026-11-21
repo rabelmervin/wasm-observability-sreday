@@ -1,0 +1,13 @@
+# Prometheus Blackbox Exporter: probes the wasmCloud host from the outside.
+# Availability from request spans goes blank when the whole host is down;
+# this probe turns that into probe_success = 0.
+modules:
+  wasmcloud_healthz:
+    prober: http
+    timeout: 3s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      # The host routes by Host header; the workload is registered for "localhost".
+      headers:
+        Host: localhost

@@ -1,0 +1,21 @@
+/// The contract between the platform (router) and every customer function.
+package demo:tenant@0.1.0;
+
+interface handler {
+  record invocation {
+    /// Function name inside the tenant, e.g. "invoice-pdf".
+    function: string,
+    /// Raw JSON request body.
+    body: list<u8>,
+    /// W3C traceparent of the router's span. Component-to-component calls are
+    /// in-process, so nothing carries trace context for us: we pass it explicitly.
+    traceparent: string,
+  }
+
+  record reply {
+    status: u16,
+    body: list<u8>,
+  }
+
+  handle: func(inv: invocation) -> reply;
+}
